@@ -47,7 +47,9 @@
    // YOUR CODE HERE
    // ...
    
-   $next_pc[31:0] = $reset ? 0 : ($pc[31:0] + 4);
+   $next_pc[31:0] = $reset ? 0 :
+                    $taken_br ? $br_tgt_pc :
+                    ($pc[31:0] + 4);
    $pc[31:0] = >>1$next_pc[31:0];
    
    `READONLY_MEM($pc[31:0], $$instr[31:0]);
@@ -78,7 +80,7 @@
                 $is_u_instr ? { $instr[31:12], 12'b0 } :
                 $is_j_instr ? { {12{$instr[31]}}, $instr[19:12], $instr[20], $instr[30:21], 1'b0 } :
                 32'b0;
-                
+
    $dec_bits[10:0] = {$funct7[5], $funct3, $opcode};
    $is_beq = $dec_bits ==? 11'bx_000_1100011;
    $is_bne = $dec_bits ==? 11'bx_001_1100011;
@@ -93,13 +95,30 @@
    $rd1_index[4:0] = $rs1[4:0];
    $rd2_en = $rs2_valid;
    $rd2_index[4:0] = $rs2[4:0];
+   $wr_en = $rd_valid & ($rd[4:0] != 5'b0);
+   $wr_index[4:0] = $rd[4:0];
+   $wr_data[31:0] = $result[31:0];
+   
+   $result[31:0] = $is_addi ? $src1_value + $imm :
+                   $is_add ? $src1_value + $src2_value :
+                   32'b0;
+
+   $taken_br = $is_beq ? ($src1_value[31:0] == $src2_value[31:0]) :
+               $is_bne ? ($src1_value[31:0] != $src2_value[31:0]) :
+               $is_blt ? (($src1_value[31:0] < $src2_value[31:0]) ^ ($src1_value[31] != $src2_value[31])) :
+               $is_bge ? (($src1_value[31:0] >= $src2_value[31:0]) ^ ($src1_value[31] != $src2_value[31])) :
+               $is_bltu ? ($src1_value[31:0] < $src2_value[31:0]) :
+               $is_bgeu ? ($src1_value[31:0] >= $src2_value[31:0]) :
+               1'b0;
+   $br_tgt_pc[31:0] = $pc[31:0] + $imm;
    
    `BOGUS_USE($rd $rd_valid $rs1 $rs1_valid $rs2 $rs2_valid $funct3 $funct3_valid $funct7 $funct7_valid
               $is_u_instr $is_i_instr $is_s_instr $is_r_instr $is_b_instr $is_j_instr $opcode $imm
-              $dec_bits $is_beq $is_bne $is_blt $is_bge $is_bltu $is_bgeu $is_addi $is_add);
+              $dec_bits $is_beq $is_bne $is_blt $is_bge $is_bltu $is_bgeu $is_addi $is_add $result);
    
    // Assert these to end simulation (before Makerchip cycle limit).
-   *passed = 1'b0;
+   //*passed = 1'b0;
+   m4+tb()
    *failed = *cyc_cnt > M4_MAX_CYC;
    
    m4+rf(32, 32, $reset, $wr_en, $wr_index[4:0], $wr_data[31:0], $rd1_en, $rd1_index[4:0], $src1_value, $rd2_en, $rd2_index[4:0], $src2_value)
